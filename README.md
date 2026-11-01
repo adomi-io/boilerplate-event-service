@@ -268,7 +268,7 @@ tests/smoke.sh event-service:dev
 
 # Building and deploying the image
 
-On every push to `main`, GitHub Actions runs the unit tests, builds the image for `linux/amd64` and `linux/arm64`, smoke tests it and publishes one multi-platform image to `ghcr.io/<owner>/<repository>` tagged `latest`, the date and the short commit sha. A pull request runs the tests and an amd64 build without pushing. Run the workflow by hand to pick the platforms, override the tag or skip the tests.
+On every push to `master`, GitHub Actions runs the unit tests, builds the image for `linux/amd64` and `linux/arm64`, smoke tests it and publishes one multi-platform image to `ghcr.io/<owner>/<repository>` tagged `latest`, the date and the short commit sha. A pull request runs the tests and an amd64 build without pushing. Run the workflow by hand to pick the platforms, override the tag or skip the tests.
 
 Dependabot opens a pull request when a Python requirement or an action has a new version, and the auto-merge workflow merges it once every check has passed.
 
