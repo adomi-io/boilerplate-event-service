@@ -31,12 +31,12 @@ for _ in $(seq 1 "$SMOKE_WAIT_SECONDS"); do
   sleep 1
 done
 
-curl -sf "http://localhost:$SMOKE_PORT/" | grep -q '"ok"' || die "health check did not answer"
+grep -q '"ok"' <<< "$(curl -sf "http://localhost:$SMOKE_PORT/")" || die "health check did not answer"
 say "Health check ok"
 
-curl -sf "http://localhost:$SMOKE_PORT/openapi.json" | grep -q '"openapi"' || die "openapi.json not served"
-curl -sf "http://localhost:$SMOKE_PORT/asyncapi.json" | grep -q '"asyncapi"' || die "asyncapi.json not served"
-curl -sf "http://localhost:$SMOKE_PORT/contracts" | grep -q '{' || die "contracts not served"
+grep -q '"openapi"' <<< "$(curl -sf "http://localhost:$SMOKE_PORT/openapi.json")" || die "openapi.json not served"
+grep -q '"asyncapi"' <<< "$(curl -sf "http://localhost:$SMOKE_PORT/asyncapi.json")" || die "asyncapi.json not served"
+grep -q '{' <<< "$(curl -sf "http://localhost:$SMOKE_PORT/contracts")" || die "contracts not served"
 say "Contracts served"
 
 # A malformed envelope is refused before the broker is involved
@@ -59,7 +59,7 @@ docker run -d --rm \
 
 sleep 3
 
-docker logs "$SMOKE_CONTAINER" 2>&1 | grep -q 'listener starting' || die "listener did not start"
+grep -q 'listener starting' <<< "$(docker logs "$SMOKE_CONTAINER" 2>&1)" || die "listener did not start"
 say "Listener started"
 
 docker rm -f "$SMOKE_CONTAINER" >/dev/null
@@ -75,8 +75,11 @@ set -e
 [ "$SMOKE_EXIT_CODE" = "64" ] || die "unknown mode exited $SMOKE_EXIT_CODE, expected 64"
 say "Unknown mode refused"
 
-docker run --rm --entrypoint python "$SMOKE_IMAGE_TAG" -m src.contracts /tmp/contracts | grep -q 'openapi.json' \
+# capture first: grep -q would close the pipe on the first match and break docker's output
+SMOKE_EXPORT_OUTPUT="$(docker run --rm --entrypoint python "$SMOKE_IMAGE_TAG" -m src.contracts /tmp/contracts)" \
   || die "contract export failed"
+
+grep -q 'openapi.json' <<< "$SMOKE_EXPORT_OUTPUT" || die "contract export did not write openapi.json"
 say "Contracts export"
 
 say "PASS"
