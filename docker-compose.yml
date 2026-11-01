@@ -1,0 +1,58 @@
+# Development stack: the api, the listener and a RabbitMQ. Settings come from .env (copy .env.example).
+# TEMPLATE: rename the image with the service
+services:
+
+  api:
+    build:
+      context: .
+    image: event-service:dev
+    command:
+      - api
+    ports:
+      - "${API_PORT:-5001}:5000"
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-UTC}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  listener:
+    image: event-service:dev
+    command:
+      - listener
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-UTC}
+    # an API on your machine is reachable as host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      TZ: ${TZ:-UTC}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-events}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-events}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-event_service}
+    ports:
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"   # the management UI, same user and password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    stop_grace_period: 60s
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data:

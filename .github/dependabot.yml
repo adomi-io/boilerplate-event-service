@@ -1,0 +1,32 @@
+# Keeps the Python requirements and the GitHub Actions versions up to date
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      requirements:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "Requirements"
+    open-pull-requests-limit: 2
+    # Dependabot applies a 3 day cooldown by default; take updates as soon as they land
+    cooldown:
+      default-days: 0
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "Actions"
+    # Dependabot applies a 3 day cooldown by default; take updates as soon as they land
+    cooldown:
+      default-days: 0

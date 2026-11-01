@@ -1,0 +1,236 @@
+openapi: 3.1.0
+
+info:
+  # TEMPLATE: name and describe the service
+  title: Event Service
+  version: 1.0.0
+  description: |
+    Producers POST an envelope `{"type": <event type>, "data": <payload>}` to `/action`. The payload
+    is validated against the schema of its type below, queued on a RabbitMQ topic exchange with
+    the type as routing key, and handled by the worker. The service loads its validators from this
+    file and serves it at GET /openapi.json; the AsyncAPI document of the bus is derived from it
+    and served at GET /asyncapi.json.
+
+# Event type to the schema its `data` must match
+# TEMPLATE: one line per event
+x-event-schemas:
+  example.created: "#/components/schemas/ExampleCreated"
+
+servers:
+  - url: http://localhost:5001
+    description: The docker compose stack (API_PORT)
+
+paths:
+  /:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    const: ok
+
+  /action:
+    post:
+      summary: Receive an event
+      operationId: publishEvent
+      description: |
+        Validates `data` against the schema of its `type` and publishes the envelope. Unknown types
+        are accepted and ignored (200). When SERVICE_API_KEY is set the request must carry it in
+        `X-API-Key`.
+      security:
+        - apiKey: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventEnvelope"
+            # TEMPLATE: one example per event
+            examples:
+              example.created:
+                summary: An example record was created
+                value:
+                  type: example.created
+                  data:
+                    id: "example-1"
+                    name: "An example"
+      responses:
+        "202":
+          description: Event queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queued:
+                    type: boolean
+                    const: true
+                  type:
+                    type: string
+        "200":
+          description: Untracked event type, accepted and ignored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  tracked_events:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          description: Envelope is malformed (missing type or data).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The configured API key is missing or wrong.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Payload does not match the contract of its type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "503":
+          description: The message broker could not be reached; nothing was queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /openapi.json:
+    get:
+      summary: This specification
+      operationId: getOpenApi
+      responses:
+        "200":
+          description: The full OpenAPI document.
+
+  /asyncapi.json:
+    get:
+      summary: The event-bus contract
+      operationId: getAsyncApi
+      description: |
+        The AsyncAPI 3.0 document of the exchange: one channel per event type, payloads inlined.
+      responses:
+        "200":
+          description: The full AsyncAPI document.
+
+  /contracts:
+    get:
+      summary: Event payload schemas
+      operationId: listContracts
+      description: |
+        The `data` schema of every event with `$ref`s resolved inline.
+      responses:
+        "200":
+          description: Mapping of event type to payload schema.
+
+  /contracts/{eventType}:
+    get:
+      summary: One event payload schema
+      operationId: getContract
+      parameters:
+        - name: eventType
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The payload schema, $refs resolved inline.
+        "404":
+          description: Unknown event type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Timestamp:
+      title: Timestamp
+      description: ISO 8601 date or timestamp. Null means unset.
+      type: [string, "null"]
+      pattern: '^\d{4}-\d{2}-\d{2}'
+      examples: ["2026-08-19", "2026-08-19T03:04:05Z", null]
+
+    # TEMPLATE: one payload schema per event; the producer's id required, the rest optional
+    ExampleCreated:
+      title: example.created
+      description: An example record was created.
+      type: object
+      required: [id]
+      properties:
+        id:
+          description: The producer's id of the record.
+          type: string
+          minLength: 1
+        name:
+          type: [string, "null"]
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+
+    # TEMPLATE: one envelope per event, listed in EventEnvelope below
+    ExampleCreatedEnvelope:
+      title: ExampleCreatedEnvelope
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          const: example.created
+        data:
+          $ref: "#/components/schemas/ExampleCreated"
+
+    EventEnvelope:
+      title: EventEnvelope
+      description: The body POSTed to /action and the message published to the exchange.
+      oneOf:
+        - $ref: "#/components/schemas/ExampleCreatedEnvelope"
+      discriminator:
+        propertyName: type
+        mapping:
+          example.created: "#/components/schemas/ExampleCreatedEnvelope"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          description: One human-readable message per schema violation.
+          type: array
+          items:
+            type: string
+        contract:
+          description: Path of the schema the payload failed against.
+          type: string
